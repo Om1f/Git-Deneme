@@ -1,0 +1,3 @@
+main dosyası 2
+
+değer = fghijk
