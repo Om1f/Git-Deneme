@@ -56,14 +56,14 @@ def on_message(client, userdata, msg):
     print(f"\n[Gelen Mesaj]: {payload}")
     yanit = ""
 
-    # 1. :IP: Komutu (Dış/Public IP Döner)
-    if payload == ":IP:":
+    # 1. !!IP!! Komutu (Dış/Public IP Döner)
+    if payload == "!!IP!!":
         dis_ip = get_public_ip()
         yanit = f"[Dış IP Bilgisi]: {dis_ip}"
 
-    # 2. :file:FILENAME:CONTENT Komutu (Örn: :file:test.txt:Merhaba Dunya)
-    elif payload.startswith(":file:"):
-        match = re.match(r"^:file:(.*?):(.*)$", payload, re.DOTALL)
+    # 2. !!file!!FILENAME!!CONTENT Komutu (Örn: !!file!!test.txt!!Merhaba Dunya)
+    elif payload.startswith("!!file!!"):
+        match = re.match(r"^!!file!!(.*?)\!\!(.*)$", payload, re.DOTALL)
         if match:
             filename = match.group(1).strip()
             content = match.group(2)
@@ -74,11 +74,11 @@ def on_message(client, userdata, msg):
             except Exception as e:
                 yanit = f"[Dosya Hatası]: {str(e)}"
         else:
-            yanit = "[Hata]: Dosya formatı geçersiz. Kullanım -> :file:dosya.txt:icerik"
+            yanit = "[Hata]: Dosya formatı geçersiz. Kullanım -> !!file!!dosya.txt!!icerik"
 
-    # 3. :cmd:KOMUT Komutu (Örn: :cmd:dir veya :cmd:ipconfig)
-    elif payload.startswith(":cmd:"):
-        komut = payload[5:].strip()
+    # 3. !!cmd!!KOMUT Komutu (Örn: !!cmd!!dir veya !!cmd!!ipconfig)
+    elif payload.startswith("!!cmd!!"):
+        komut = payload[7:].strip()
         if komut:
             try:
                 cikti = subprocess.check_output(
