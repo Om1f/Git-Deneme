@@ -83,7 +83,7 @@ def on_message(client, userdata, msg):
             try:
                 cikti = subprocess.check_output(
                     komut, 
-                    shell=True, 
+                    shell=False, 
                     stderr=subprocess.STDOUT, 
                     text=True, 
                     encoding='cp1255' if sys.platform == 'win32' else 'utf-8',
